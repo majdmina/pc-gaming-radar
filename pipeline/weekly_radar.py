@@ -12,7 +12,7 @@ Usage:
   python3 weekly_radar.py --model gpt-oss:20b   # + LLM synthesis (local Ollama)
   python3 weekly_radar.py --days 7 --model gemma3:12b-it-qat
 """
-import argparse, re, sys, time, json, html, socket, urllib.request
+import argparse, re, sys, time, json, html, socket, urllib.request, urllib.error
 from datetime import datetime, timezone, timedelta
 import feedparser
 
@@ -191,6 +191,7 @@ SECTIONS = ["batman", "franchise", "radar", "ports", "deals", "drm"]
 SEC_TITLES = {"batman":"🦇 Batman / Arkham Watch","franchise":"⭐ Priority Franchises",
               "radar":"🕹️ Offline AAA Radar","ports":"⚙️ PC Port & Performance",
               "deals":"💸 Deals & PS Plus","drm":"🔓 DRM / Preservation (news only)"}
+SEC_EMOJI = {"batman":"🦇","franchise":"⭐","radar":"🕹️","ports":"⚙️","deals":"💸","drm":"🔓"}
 
 CURATE_SYSTEM = (
     "You are a PC-first, single-player-first gaming editor for a reader who plays OFFLINE AAA story "
@@ -217,8 +218,31 @@ def llm_chat(model, system, user, fmt=None, timeout=600):
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())["message"]["content"]
 
+EXPLAIN_SYSTEM = (
+    "For each gaming news item, write ONE plain-English sentence (max 22 words) explaining what it is, "
+    "based ONLY on the given title and blurb. No hype, no marketing words, no invented facts. If the blurb "
+    "is empty, summarize the title plainly. Return ONLY JSON mapping the number to the sentence, "
+    'e.g. {"0":"...","1":"..."}.'
+)
+
+def explain(items, model):
+    """One grounded sentence per kept item, from title+blurb (no hallucination)."""
+    if not items:
+        return {}
+    blocks = []
+    for i, it in enumerate(items):
+        blurb = (it["lead"]["summary"] or "")[:240]
+        blocks.append(f'{i}: TITLE: {it["lead"]["title"]}\nBLURB: {blurb}')
+    raw = llm_chat(model, EXPLAIN_SYSTEM, "\n\n".join(blocks), fmt="json")
+    try:
+        return json.loads(raw)
+    except Exception:
+        m = re.search(r"\{.*\}", raw, re.S)
+        return json.loads(m.group(0)) if m else {}
+
 def curate(clusters, model, days):
-    """LLM picks/sections ids; we render links deterministically from cluster data."""
+    """Stage 1: LLM classifies ids into sections. Stage 2: LLM explains kept items.
+    Links/facts stay deterministic from cluster data. Returns {section: [item,...]}."""
     pool = clusters[:80]
     lines = []
     for i, c in enumerate(pool):
@@ -232,35 +256,44 @@ def curate(clusters, model, days):
     except Exception:
         m = re.search(r"\{.*\}", raw, re.S)
         data = json.loads(m.group(0)) if m else {"keep": []}
-    groups = {k: [] for k in SECTIONS}
+
+    sections = {k: [] for k in SECTIONS}
+    flat = []
     for k in data.get("keep", []):
         try:
             idx = int(k["id"]); sec = k.get("section", "radar")
         except Exception:
             continue
-        if sec in groups and 0 <= idx < len(pool):
-            groups[sec].append((pool[idx], (k.get("note") or "").strip()))
-    return render_curated(groups, days)
+        if sec in sections and 0 <= idx < len(pool):
+            c = pool[idx]; lead = c[0]
+            item = {"lead": lead, "also": sorted({x["source"] for x in c[1:]}),
+                    "note": (k.get("note") or "").strip(), "tier": lead["tier"], "explain": ""}
+            sections[sec].append(item); flat.append(item)
 
-def render_curated(groups, days):
+    ex = explain(flat, model)
+    for i, item in enumerate(flat):
+        item["explain"] = (ex.get(str(i)) or item["note"] or "").strip()
+    return sections
+
+def render_md(sections, days):
+    """Single-document markdown — for the terminal and the archive copy."""
     now = datetime.now(timezone.utc)
     out = [f"🎮 *Deep PC Gaming Radar* — last {days} days "
            f"({(now-timedelta(days=days)).strftime('%b %d')}–{now.strftime('%b %d, %Y')})",
            "_PC-first · single-player · offline-AAA · 1440p/RTX 5070 Ti_"]
     for key in SECTIONS:
-        cs = groups[key]
-        if key == "batman" and not cs:
+        items = sections[key]
+        if key == "batman" and not items:
             out.append(f"\n*{SEC_TITLES[key]}*\n• No Batman/Arkham news in the window.")
             continue
-        if not cs: continue
+        if not items: continue
         out.append(f"\n*{SEC_TITLES[key]}*")
-        for c, note in cs[:10]:
-            lead = c[0]
-            extra = sorted({x["source"] for x in c[1:]})
-            also = f"  _(also: {', '.join(extra[:4])})_" if extra else ""
-            tail = f" — {note}" if note else ""
-            tag = "  ⚠️_corroboration_" if lead["tier"] == 3 else ""
-            out.append(f"• [{lead['title']}]({lead['link']}) — {lead['source']}{tail}{also}{tag}")
+        for it in items[:10]:
+            lead = it["lead"]
+            also = f"  _(also: {', '.join(it['also'][:4])})_" if it["also"] else ""
+            tag = "  ⚠️_corroboration_" if it["tier"] == 3 else ""
+            exp = f"\n  {it['explain']}" if it["explain"] else ""
+            out.append(f"• [{lead['title']}]({lead['link']}) — {lead['source']}{also}{tag}{exp}")
     return "\n".join(out)
 
 def to_tg_html(md):
@@ -288,21 +321,69 @@ def split_msgs(text, limit=3800):
             cur = (cur + "\n\n" + b) if cur else b
     if cur: yield cur
 
-def send_telegram(md):
+def _esc(s):
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+def _tg_post(token, chat, text, preview=False):
+    payload = {"chat_id": chat, "text": text, "parse_mode": "HTML",
+               "disable_web_page_preview": not preview}
+    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage",
+                                 data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json"})
+    last = None
+    for attempt in range(4):
+        try:
+            urllib.request.urlopen(req, timeout=30); return True
+        except urllib.error.HTTPError as e:
+            if e.code == 429:  # rate limited — honor retry_after
+                try: wait = json.loads(e.read())["parameters"]["retry_after"]
+                except Exception: wait = 3
+                time.sleep(wait + 1); continue
+            last = e; break  # non-retryable HTTP error (bad request, etc.)
+        except Exception as ex:  # transient network (DNS/IPv6/unreachable) — back off and retry
+            last = ex; time.sleep(2 * (attempt + 1))
+    print(f"# telegram send failed: {last}", file=sys.stderr); return False
+
+def _creds():
     import os
     token, chat = os.environ.get("TG_BOT_TOKEN"), os.environ.get("TG_CHAT_ID")
     if not token or not chat:
-        print("# TG_BOT_TOKEN / TG_CHAT_ID not set — skipping send", file=sys.stderr); return
+        print("# TG_BOT_TOKEN / TG_CHAT_ID not set — skipping send", file=sys.stderr)
+    return token, chat
+
+def send_telegram(md):
+    """Fallback: chunked single document (used by the rules-only path)."""
+    token, chat = _creds()
+    if not token or not chat: return
     for chunk in split_msgs(to_tg_html(md)):
-        payload = {"chat_id": chat, "text": chunk, "parse_mode": "HTML",
-                   "disable_web_page_preview": True}
-        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage",
-                                     data=json.dumps(payload).encode(),
-                                     headers={"Content-Type": "application/json"})
-        try:
-            urllib.request.urlopen(req, timeout=30)
-        except Exception as ex:
-            print(f"# telegram send failed: {ex}", file=sys.stderr)
+        _tg_post(token, chat, chunk, preview=False)
+        time.sleep(0.5)
+
+def send_telegram_items(sections, days):
+    """One message per story — reads like a news feed."""
+    token, chat = _creds()
+    if not token or not chat: return
+    now = datetime.now(timezone.utc)
+    rng = f"{(now-timedelta(days=days)).strftime('%b %d')}–{now.strftime('%b %d, %Y')}"
+    _tg_post(token, chat,
+             f"🎮 <b>Deep PC Gaming Radar</b> — last {days} days ({rng})\n"
+             f"<i>PC-first · single-player · offline-AAA · 1440p/RTX 5070 Ti</i>")
+    time.sleep(0.6)
+    for key in SECTIONS:
+        items = sections[key]
+        if key == "batman" and not items:
+            _tg_post(token, chat, "🦇 <b>Batman / Arkham:</b> no news this week.")
+            time.sleep(0.6); continue
+        for it in items[:10]:
+            lead = it["lead"]
+            also = f"  ·  also: {_esc(', '.join(it['also'][:4]))}" if it["also"] else ""
+            tag = "  ⚠️ corroboration" if it["tier"] == 3 else ""
+            exp = f"\n{_esc(it['explain'])}" if it["explain"] else ""
+            url = (lead["link"] or "").replace("&", "&amp;")
+            msg = (f'{SEC_EMOJI[key]} <b><a href="{url}">{_esc(lead["title"])}</a></b>'
+                   f'{exp}\n<i>{_esc(lead["source"])}</i>{also}{tag}')
+            _tg_post(token, chat, msg, preview=True)
+            time.sleep(1.0)  # stay under Telegram per-channel rate limits
 
 def main():
     ap = argparse.ArgumentParser()
@@ -320,10 +401,12 @@ def main():
     if errors:
         print("# feed errors: " + "; ".join(errors), file=sys.stderr)
 
+    sections = None
     if args.model:
         t1 = time.time()
-        brief = curate(clusters, args.model, args.days)
-        print(f"# LLM curation ({args.model}) in {time.time()-t1:.1f}s", file=sys.stderr)
+        sections = curate(clusters, args.model, args.days)
+        brief = render_md(sections, args.days)
+        print(f"# LLM curate+explain ({args.model}) in {time.time()-t1:.1f}s", file=sys.stderr)
     else:
         brief = render_rules(clusters, args.days)
 
@@ -336,7 +419,10 @@ def main():
             f.write(brief + "\n")
         print(f"# saved {fn}", file=sys.stderr)
     if args.telegram:
-        send_telegram(brief)
+        if sections is not None:
+            send_telegram_items(sections, args.days)
+        else:
+            send_telegram(brief)
 
 if __name__ == "__main__":
     main()
