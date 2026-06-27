@@ -1,6 +1,18 @@
-# PC Gaming Radar — Perplexity Pipeline
+# PC Gaming Radar
 
-A weekly **PC-first, single-player, offline-AAA** gaming briefing run by a Perplexity scheduled task.
+A weekly **PC-first, single-player, offline-AAA** gaming briefing. Two delivery paths:
+
+- **Path A — Perplexity task** (zero-maintenance, synthesis/research). Spec below.
+- **Path B — Local pipeline** (`pipeline/`): self-hosted RSS + local Ollama (Gemma/gpt-oss on your
+  RTX 5070 Ti) → Telegram, **a link per headline**, weekly via a systemd timer that catches up if the
+  PC was off. $0, no paid API. See [`pipeline/README.md`](pipeline/README.md). A real sample lives in
+  [`archive/`](archive/).
+
+---
+
+## Path A — Perplexity Pipeline
+
+A weekly briefing run by a Perplexity scheduled task.
 
 The problem this repo solves: Perplexity's task box caps at **~2,000 characters**, but the full spec is ~7,500.
 So the spec lives here as a fetchable file, and the Perplexity task is just a tiny pointer that says

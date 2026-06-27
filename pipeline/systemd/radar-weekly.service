@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Deep PC Gaming Radar (local RSS + Ollama -> Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# %h = your home dir. Edit if the repo lives elsewhere.
+ExecStart=%h/pc-gaming-radar/pipeline/run_weekly.sh
+# Give the model time on a weekly batch; don't kill a slow 27B run.
+TimeoutStartSec=1800

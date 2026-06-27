@@ -1,0 +1,12 @@
+[Unit]
+Description=Fire the weekly PC Gaming Radar (Fri 08:00, catches up if PC was off)
+
+[Timer]
+OnCalendar=Fri *-*-* 08:00:00
+# THE key flag: if the machine was off/asleep at 08:00, run at next boot/login.
+Persistent=true
+# Avoid every-Friday-at-once thundering if you add more timers later.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

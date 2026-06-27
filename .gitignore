@@ -1,0 +1,6 @@
+# secrets
+pipeline/.env
+# runtime junk
+pipeline/err*.log
+__pycache__/
+*.pyc
