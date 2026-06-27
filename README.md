@@ -13,12 +13,14 @@ So the spec lives here as a fetchable file, and the Perplexity task is just a ti
 | **`radar.md`** | The full, authoritative spec. This is what Perplexity fetches and obeys. |
 | **`prompt.txt`** | The exact text to paste into the Perplexity task box (pointer + compressed fallback, **under 2,000 chars**). |
 | **`last-week.md`** | Optional de-dup memory. Paste last week's brief here so the next run avoids repeating stories. |
+| **`profile.md`** | Optional. Your owned/finished/backlog/wishlist lists — the spec reads it so it never recommends games you already have and prioritizes your wishlist. |
 | **`archive/`** | Drop each week's output as `YYYY-MM-DD.md` to build a searchable personal history. |
 
 ## The fetch URLs (raw, stable, public)
 
 - Spec: `https://raw.githubusercontent.com/majdmina/pc-gaming-radar/main/radar.md`
 - De-dup memory: `https://raw.githubusercontent.com/majdmina/pc-gaming-radar/main/last-week.md`
+- Profile: `https://raw.githubusercontent.com/majdmina/pc-gaming-radar/main/profile.md`
 
 ## Setup (one time)
 

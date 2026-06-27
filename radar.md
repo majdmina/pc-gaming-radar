@@ -118,3 +118,12 @@ Track public chatter around the active 2026 cracker **voices38** (a.k.a. voksi38
 
 If reachable, also fetch **`last-week.md`** in this same repo before writing. It holds a short list of stories already covered in recent runs.
 Use it only to **avoid repeating** what's already been reported — do not let a failed fetch block the brief. If it can't be fetched, just proceed.
+
+## 9. Personal Profile (optional, best-effort)
+
+If reachable, also fetch **`profile.md`** in this same repo before writing. It lists owned/finished games, the backlog, the active wishlist, and ruled-out titles. Apply it as follows (and if it can't be fetched, just proceed):
+
+- **Owned & Finished** — never recommend buying; only surface DLC, patches, or sequel news.
+- **Owned & In Backlog** — don't push "buy"; surface patches, "good time to play now", or finished-status notes.
+- **Wishlist** — actively **prioritize**: price drops, PC-port news, reviews, patch status. These should bubble to the top of Wishlist & Backlog Watch and Deals.
+- **Not Interested** — suppress unless a priority-franchise or PC-performance angle forces inclusion.
