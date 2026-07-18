@@ -30,7 +30,7 @@ facts come from the feed data, so the output can't hallucinate and never loses a
 ## Quick start
 
 ```bash
-cd ~/pc-gaming-radar/pipeline
+cd ~/LocalOps/projects/pc-gaming-radar/pipeline
 python3 weekly_radar.py                       # rules-only, prints to terminal
 python3 weekly_radar.py --model gemma3:12b-it-qat   # + local LLM curation
 ```
@@ -56,7 +56,7 @@ python3 weekly_radar.py --model gemma3:12b-it-qat   # + local LLM curation
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp ~/pc-gaming-radar/pipeline/systemd/radar-weekly.{service,timer} ~/.config/systemd/user/
+cp ~/LocalOps/projects/pc-gaming-radar/pipeline/systemd/radar-weekly.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now radar-weekly.timer
 systemctl --user list-timers radar-weekly.timer      # confirm next run

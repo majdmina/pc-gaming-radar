@@ -5,7 +5,7 @@ Last verified: **2026-06-27**.
 
 ## What is running
 
-- **Repo / code:** `~/pc-gaming-radar/` (GitHub: `majdmina/pc-gaming-radar`).
+- **Repo / code:** `~/LocalOps/projects/pc-gaming-radar/` (GitHub: `majdmina/pc-gaming-radar`).
 - **Scheduler:** `systemd --user` units `radar-weekly.{timer,service}` in `~/.config/systemd/user/`.
   - Fires **Fri 08:00** (`+RandomizedDelaySec=300`, so ~08:0X). `Persistent=true` → if the PC was
     off at 08:00 it runs at the next login/boot.
@@ -13,7 +13,7 @@ Last verified: **2026-06-27**.
 - **Model:** `gemma3:12b-it-qat` via local Ollama on the RTX 5070 Ti. (Alts: `gpt-oss:20b`,
   `gemma3:27b-it-qat`, `gemma3:4b-it-qat`.)
 - **Output:** one Telegram message per story → bot **@MinacoGamingBot** → channel **"GamingRadar"**.
-  Also archived to `~/pc-gaming-radar/archive/YYYY-MM-DD.md`.
+  Also archived to `~/LocalOps/projects/pc-gaming-radar/archive/YYYY-MM-DD.md`.
 - **Secrets:** `pipeline/.env` (gitignored) holds `TG_BOT_TOKEN`, `TG_CHAT_ID`, `RADAR_MODEL`,
   `RADAR_DAYS`. Never committed.
 
@@ -34,7 +34,7 @@ curl -s http://localhost:11434/api/tags >/dev/null && echo ollama-ok
 systemctl --user start radar-weekly.service
 
 # or directly, to see output in the terminal:
-cd ~/pc-gaming-radar/pipeline
+cd ~/LocalOps/projects/pc-gaming-radar/pipeline
 python3 weekly_radar.py                               # rules-only, no LLM, no send
 python3 weekly_radar.py --model gemma3:12b-it-qat     # with summaries, prints only
 set -a; . ./.env; set +a
